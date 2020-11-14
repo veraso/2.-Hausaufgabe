@@ -135,3 +135,120 @@ Hier muss ich sagen, steh ich etwas auf dem Schlauch und mir fallen nicht wirkli
 
 
 
+# Verbesserung #
+
+## Beheben der Unterschiede in Groß- und Kleinschreibung ##
+
+### Wie könnte man das mit regulären Ausdrücken beheben? ###
+
+```{r}
+all %>%
+  select(`Book-Author`) %>%
+  mutate(bereinigt = ifelse(grepl("[A-Z]{2}", `Book-Author`), str_to_title(`Book-Author`),`Book-Author`))
+```
+
+```{r}
+all <- all %>%
+  mutate(`Book-Author` = ifelse(grepl("[A-Z]{2}", `Book-Author`), str_to_title(`Book-Author`), `Book-Author`))
+```
+
+```{r message = FALSE}
+i3 <- split(all$`Book-Author`,all$`User-ID`)
+txn3 <- as(i3, "transactions")
+basket_rules3 <- apriori(txn3, parameter = list(sup = 0.0015, conf = 0.001, minlen = 2, target = "rules"))
+basket_rules_hi3 <- head(basket_rules3, by = "lift", 100)
+plot(basket_rules_hi3, method = "graph", main = "Authors")
+
+```
+```{r}
+plot(basket_rules_hi3, method = "graph", main = "Authors", engine = "interactive")
+```
+
+
+
+### Wie kann man nun noch sicherstellen, dass nur die Autoren weiterempfohlen werden, deren Bücher man auch (mehrheitlich) gut fand? ###
+
+
+Mindesthöhe für Rating und Mindestanzahl festlegen:
+
+```{r}
+good_authors <- all %>%
+  filter(`Book-Rating` > 6) %>%
+  group_by(`Book-Author`, `Book-Title`) %>%
+  mutate(ratings_neu = n()) %>%
+  filter(ratings_neu > 6) %>%
+  mutate(median_r = median(`Book-Rating`)) %>%
+  filter(median_r > 6)
+```
+
+```{r}
+i4 <- split(good_authors$`Book-Author`, good_authors$`User-ID`)
+txn4 <- as(i4, "transactions")
+basket_rules4 <- apriori(txn4, parameter = list(sup = 0.0015, conf = 0.001, minlen = 2, target = "rules"))
+basket_rules_hi4 <- head(basket_rules4, by = "lift", 100)
+plot(basket_rules_hi4, method = "graph", main = "Authors")
+```
+
+```{r}
+plot(basket_rules_hi4, method = "graph", main = "Authors", engine = "interactive")
+```
+
+### Welche anderen Features wären sinnvoll? ###
+
+Man könnte diesen Weg nutzen, um einen Überblick zu erhalten, welche Autoren in welchen Ländern gelesen wurden.
+
+```{r}
+authors_germany <- all %>%
+  filter(`country` == "germany") %>%
+  group_by(`Book-Author`, `Book-Title`)
+```
+
+```{r}
+i5 <- split(authors_germany$`Book-Author`, authors_germany$`User-ID`)
+txn5 <- as(i5, "transactions")
+basket_rules5 <- apriori(txn5, parameter = list(sup = 0.0015, conf = 0.001, minlen = 2, target = "rules"))
+basket_rules_hi5 <- head(basket_rules5, by = "lift", 100)
+plot(basket_rules_hi5, method = "graph", main = "Authors")
+```
+
+```{r}
+plot(basket_rules_hi5, method = "graph", main = "Authors", engine = "interactive")
+```
+
+
+```{r}
+authors_zimbabwe <- all %>%
+  filter(`country` == "zimbabwe") %>%
+  group_by(`Book-Author`, `Book-Title`)
+```
+
+```{r}
+i6 <- split(authors_zimbabwe$`Book-Author`, authors_zimbabwe$`User-ID`)
+txn6 <- as(i6, "transactions")
+basket_rules6 <- apriori(txn6, parameter = list(sup = 0.0015, conf = 0.001, minlen = 2, target = "rules"))
+basket_rules_hi6 <- head(basket_rules6, by = "lift", 100)
+plot(basket_rules_hi6, method = "graph", main = "Authors")
+```
+```{r}
+plot(basket_rules_hi6, method = "graph", main = "Authors", engine = "interactive")
+```
+
+
+Auch kann man sich eine verlgeichbare Übersicht schaffen, welche Bücher der - hier in Deutschland gelesenen - Autoren in unterschiedlichen Altersgruppen am besten bewertet wurden.
+
+```{r}
+authors_germany  %>%
+  filter(`Book-Rating` > 3) %>%
+  filter(Age > 50) %>%
+  group_by(`Book-Title`) %>%
+  summarize(median_r = median(`Book-Rating`), n = n()) %>%
+  arrange(desc(median_r), desc(n))
+```
+```{r}
+authors_germany  %>%
+  filter(`Book-Rating` > 3) %>%
+  filter(Age < 51) %>%
+  group_by(`Book-Title`) %>%
+  summarize(median_r = median(`Book-Rating`), n = n()) %>%
+  arrange(desc(median_r), desc(n))
+```
