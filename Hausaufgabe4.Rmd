@@ -1,0 +1,284 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(e1071)
+library(pROC)
+library(caret)
+```
+
+```{r}
+titanic <- read_delim("titanic.csv", ";", 
+    escape_double = FALSE, trim_ws = TRUE)
+```
+
+# Wiederholung #
+
+```{r}
+titanic %>%
+  group_by(survived) %>%
+  summarize(n = n())
+```
+
+```{r}
+titanic %>%
+  group_by(survived, sex) %>%
+  summarize(n = n())
+```
+
+```{r}
+titanic %>%
+  group_by(pclass, survived) %>%
+  summarize(n = n())
+```
+
+
+```{r}
+(titanic.df <- titanic %>%
+  select(survived,pclass,age))
+```
+
+
+```{r}
+titanic.df <- titanic.df %>%
+  mutate(age = as.numeric(str_replace(age,",",".")))
+```
+
+```{r}
+titanic.df <- na.omit(titanic.df)
+```
+
+```{r}
+set.seed(107)
+inTrain <- createDataPartition(
+  y = titanic.df$survived,
+  p = .8,
+  list = FALSE)
+training <- titanic.df[ inTrain,]
+testing  <- titanic.df[-inTrain,]
+```
+```{r}
+model <- svm(survived ~ ., data = training)
+summary(model)
+pred <- predict(model, testing[,-1], probability = FALSE)
+```
+```{r}
+(test.results <- cbind(pred, testing))
+```
+
+```{r}
+test.results2 <- test.results %>%
+  mutate(pred = ifelse(pred>=0.5,1,0))
+table(test.results2$pred, testing$survived)
+```
+
+```{r}
+pROC_obj <- roc(test.results$survived, test.results$pred,
+            smoothed = TRUE,
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+```
+
+```{r}
+(titanic.df <- titanic %>%
+  select(survived,pclass,sex,age))
+```
+
+```{r}
+titanic.df <- titanic.df %>%
+  mutate(sex = ifelse(sex == "female", 1, 0))
+```
+
+```{r}
+titanic.df <- na.omit(titanic.df)
+```
+
+# Hausaufgaben #
+ 
+## Bitte erstellen Sie ein Notebook mit weiteren Features (Alter, Geschlecht und Klasse sind als Beispiel in meinem Notebook auf GitHub) ##
+
+Hinzunehmen der Variable "embarked" mit den Inhalten der Einstiegshafen C (=Cherbourgh), Q (=Queenstown), S (=Southampton):
+
+```{r}
+titanic.df.v <- titanic %>%
+  select(survived,pclass,sex,age,embarked)
+```
+
+Variable Geschlecht umwandeln in 1 für female und 0 für male:
+
+```{r}
+(titanic.df.v2 <- titanic.df.v %>%
+  mutate(sex = ifelse(sex == "female", 1, 0)) %>%
+  mutate(age = as.numeric(str_replace(age,",","."))))
+```
+
+NA-Datensätze löschen:
+
+```{r}
+titanic.df.v2 <- na.omit(titanic.df.v2)
+```
+
+Variable Einstiegshafen umwandeln in S=0, C=1 und Q=2:
+
+```{r}
+(titanic.df.v2 <- titanic.df.v2 %>%
+   mutate(embarked = ifelse(embarked == "S", 0, ifelse(embarked == "C", 1, 2))))
+```
+
+## SVM: ##
+
+
+
+
+```{r}
+set.seed(100)
+inTrain.svm <- createDataPartition(
+  y = titanic.df.v2$survived,
+  p = .8,
+  list = FALSE)
+training.svm <- titanic.df.v2[ inTrain.svm,]
+testing.svm  <- titanic.df.v2[-inTrain.svm,]
+```
+
+
+
+```{r}
+model.svm <- svm(survived ~ ., data = training.svm)
+summary(model.svm)
+pred.svm <- predict(model.svm, testing.svm[,], probability = FALSE)
+```
+
+```{r}
+(test.results.svm <- cbind(pred.svm, testing.svm))
+```
+
+```{r}
+test.results.svm2 <- test.results.svm %>%
+  mutate(pred.svm = ifelse(pred.svm>=0.5,1,0))
+```
+
+```{r}
+table(test.results.svm2$pred.svm, testing.svm$survived)
+```
+
+
+```{r}
+pROC_obj.svm <- roc(test.results.svm$survived, test.results.svm$pred.svm,
+            smoothed = TRUE,
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+```
+
+
+## Naive Bayes: ##
+
+```{r}
+my_training.nb <- training.svm %>%
+  mutate(survived = as.factor(survived))%>%
+  mutate(sex = as.factor(sex))%>%
+  mutate(pclass = as.factor(pclass)) %>%
+  mutate(age = as.factor(ifelse(age < 14, "child", "adult"))) %>%
+  mutate(embarked = as.factor(embarked))
+model.nb <- naiveBayes(survived ~ ., data = my_training.nb)
+model.nb
+```
+
+```{r}
+my_testing.nb <- testing.svm %>%
+  mutate(sex = as.factor(sex)) %>%
+  mutate(pclass = as.factor(pclass))%>%
+  mutate(age = as.factor(ifelse(age < 14, "child", "adult"))) %>%
+  mutate(embarked = as.factor(embarked))
+pred.nb <- predict(model.nb, my_testing.nb)
+table(pred.nb, my_testing.nb$survived)
+```
+
+```{r}
+(test.results.nb <- cbind(pred.nb, my_testing.nb))
+```
+
+```{r}
+test.results.nb <- test.results.nb %>%
+  mutate(pred.nb = as.numeric(pred.nb))
+pROC_obj.nb <- roc(as.numeric(as.character(test.results.nb$survived)), test.results.nb$pred.nb,
+            smoothed = TRUE,
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+```
+
+
+## Decision Tree: ##
+
+```{r}
+library(rpart)
+library(rpart.plot)
+tree <- rpart(survived~., data = training.svm, method = 'class')
+rpart.plot(tree)
+```
+
+```{r}
+dt_results <- predict(tree, testing.svm[,-1], type = 'prob')
+head(model.results.dt <- cbind(testing.svm,dt_results),500)
+```
+
+
+
+```{r}
+test.results.nb2 <- test.results.nb %>%
+  mutate(pred.nb = ifelse(pred.nb>=0.5,1,0))
+table(test.results.nb2$pred.nb, testing.svm$survived)
+```
+```{r}
+pROC_obj.dt <- roc(model.results.dt$survived,model.results.dt$`1`,
+            smoothed = TRUE,
+            # arguments for ci
+            ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+            # arguments for plot
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+```
+
+
+
+## Was sind die Unterschiede in der Performance der Algorithmen? Finden Sie Erklärungen dafür. ##
+
+Hinsichtlich der Unterschieder der Algorithmen, habe ich mir die Confusion Matrix von allen dreien angeschaut. Hier lassen sich direkt unterschiedliche Ergebnisse erkennen, obwohl ja mit demselben Datensatz gearbeitet wird.
+Wenn wir also davon aussgehen dass "0" für Nein und "1" für Ja steht, ergeben sich folgende Ergebnisse:
+
+SVM:
+
+True Positive: 51 
+True Negative: 114
+False Positive: 35
+False Negative: 8
+
+--> bei 51 der 208 berücksichtigten Passagiere wurde also sowohl vermutet, als auch belegt, dass sie überlebt haben
+--> bei 114 wurde sowohl vermutet, als auch belegt, dass sie nicht überlebt haben
+--> bei 35 wurde vermutet, dass sie überlebt haben, jedoch belegt dass dies nicht stimmt
+--> bei 8 wurde vermutet, dass sie nicht überlebt haben, jedoch belegt, dass sie überlebt haben
+
+Naive Bayes:
+
+True Positive: 60
+True Negative: 101
+False Positive: 26
+False Negative: 21
+
+Decision Tree:
+
+True Positive: 86
+False Negative: 122
+
+Bei der Confusion Matrix des Decision Trees bin ich mir sehr unsicher. Ich weiß nicht, ob ich hier einen Fehler gemacht habe oder nicht. Zuerst dachte ich, dass hier einfach die 2. Rechnung weggelassen wurde, also, dass mit den vorhergesagten Werten nur z.B. der belegte Wert für "survived" berechnet wurde und der Rest einfach "not survived" zugeordnet wurde, ohne nochmals eigens berechnet zu werden, aber das erschien mir dann als ein Denkfehler.
+Bei  meinem Ergebnis würde ja, bei gleicher Betrachtungsweise wie bei den anderen beiden Algorithmen, schlichtweg die Möglichkeit der belegten "Nein"-Werte (0) fehlen. Meine einzige Erklärung hier wäre, dass in dieser Form nur die vermuteten Werte angezeigt werden.
+
+Hinsichtlich der Unterschiede in der Performance der anderen beiden Algorithmen (und sollte mein Ergebnis beim Decision Tree einfach fehlerhaft sein, auch hier) habe ich zuerst die False Negative Ergebnisse betrachtet. Hier lässt sich erkennen, dass bei Naive Bayes mit 21 FN ein höherer Wert vorhanden ist, als die 8 bei SVM. Dies zeigt, dass der Naive Bayes Algorithmus mehr Personen fälschlicherweise bei "not survived" eingeteilt hat. Bei den False Positives hingegen, schneidet SVM mit 35 schlechter ab, als Naive Bayes mit 26. Sieht man einen Type-I-Error, also False Positive, als schlimmer an, wäre Naive Bayes der "bessere" Algorithmus, findet man einen Type-II-Error, False Negative, schlimmer, ist SVM besser.
+
+Eine eventuelle Erklärung für Unterschiede bei den Algorithmen und ihren Ergebnissen, könnte sein, dass so wie es im Code aussieht, der Naive Baye Algorithmus mehr in die Tiefe geht. Bei dieser Vorgehensweise wird jeweils eine Confusion Matrix für alle im Datensatz vorhandenen Variablen erstellt und anschließend erst eine für den Datensatz im Gesamten. Vielleicht liegt in der Tiefe und dem Hinzufügen der Zwischen- bzw. Zusatzschritte ein Grund für die unterschiedlichen Ergebnisse.
